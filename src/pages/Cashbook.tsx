@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getTransactions } from '@/lib/storage';
+import api from '@/lib/api';
 import { Transaction } from '@/types';
 import { TrendingUp, TrendingDown, DollarSign, Filter } from 'lucide-react';
 import { format } from 'date-fns';
@@ -14,49 +14,44 @@ const Cashbook = () => {
     type: '',
   });
 
-  useEffect(() => {
-    loadTransactions();
-  }, []);
+  const [summary, setSummary] = useState({
+    total_credit: 0,
+    total_debit: 0,
+    net_earnings: 0,
+  });
 
   useEffect(() => {
-    applyFilters();
-  }, [transactions, filters]);
+    loadData();
+  }, [filters]);
 
-  const loadTransactions = () => {
-    const allTransactions = getTransactions().sort((a, b) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-    setTransactions(allTransactions);
+  const loadData = async () => {
+    try {
+      // Load transactions with filters
+      const params: any = { limit: 1000 };
+      if (filters.fromDate) params.start_date = filters.fromDate;
+      if (filters.toDate) params.end_date = filters.toDate;
+      if (filters.method) params.method = filters.method;
+      if (filters.type) params.type = filters.type;
+
+      const [transactionsRes, summaryRes] = await Promise.all([
+        api.get('/cashbook', { params }),
+        api.get('/cashbook/summary')
+      ]);
+
+      setTransactions(transactionsRes.data);
+      setFilteredTransactions(transactionsRes.data);
+      setSummary(summaryRes.data);
+    } catch (error) {
+      console.error("Failed to load cashbook data", error);
+    }
   };
 
-  const applyFilters = () => {
-    let filtered = [...transactions];
+  // Deprecated client-side filtering and calc, now handled by fetch re-trigger
+  const applyFilters = () => { };
 
-    if (filters.fromDate) {
-      filtered = filtered.filter(t => new Date(t.date) >= new Date(filters.fromDate));
-    }
-    if (filters.toDate) {
-      filtered = filtered.filter(t => new Date(t.date) <= new Date(filters.toDate));
-    }
-    if (filters.method) {
-      filtered = filtered.filter(t => t.method === filters.method);
-    }
-    if (filters.type) {
-      filtered = filtered.filter(t => t.type === filters.type);
-    }
-
-    setFilteredTransactions(filtered);
-  };
-
-  const totalCredit = filteredTransactions
-    .filter(t => t.type === 'Credit')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalDebit = filteredTransactions
-    .filter(t => t.type === 'Debit')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const netEarning = totalCredit - totalDebit;
+  const totalCredit = summary.total_credit;
+  const totalDebit = summary.total_debit;
+  const netEarning = summary.net_earnings;
 
   const StatCard = ({ title, value, icon: Icon, color }: any) => (
     <div className="bg-card rounded-xl p-6 shadow-md">
@@ -183,18 +178,16 @@ const Cashbook = () => {
                     </td>
                     <td className="p-4 text-center">
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          transaction.type === 'Credit'
-                            ? 'bg-success/20 text-success'
-                            : 'bg-destructive/20 text-destructive'
-                        }`}
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${transaction.type === 'Credit'
+                          ? 'bg-success/20 text-success'
+                          : 'bg-destructive/20 text-destructive'
+                          }`}
                       >
                         {transaction.type}
                       </span>
                     </td>
-                    <td className={`p-4 text-right font-bold ${
-                      transaction.type === 'Credit' ? 'text-success' : 'text-destructive'
-                    }`}>
+                    <td className={`p-4 text-right font-bold ${transaction.type === 'Credit' ? 'text-success' : 'text-destructive'
+                      }`}>
                       {transaction.type === 'Credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
                     </td>
                     <td className="p-4 text-center">

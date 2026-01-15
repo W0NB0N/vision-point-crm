@@ -1,74 +1,52 @@
 import { useState, useEffect } from 'react';
-import { getSales, getCustomers } from '@/lib/storage';
+import api from '@/lib/api';
 import { sendWhatsAppMessage, getRecallMessage, getBirthdayMessage } from '@/lib/whatsapp';
-import { Sale, Customer } from '@/types';
-import { TrendingUp, DollarSign, Calendar, MessageCircle } from 'lucide-react';
-import { format, isToday, isSameMonth, subMonths, parse } from 'date-fns';
+import { DashboardStats } from '@/types';
+import { TrendingUp, DollarSign, Calendar, MessageCircle, AlertCircle } from 'lucide-react';
+import { format } from 'date-fns';
+import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [stats, setStats] = useState({
-    todaySales: 0,
-    thisMonthSales: 0,
-    lastMonthSales: 0,
-  });
+  const [data, setData] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    const allSales = getSales();
-    const allCustomers = getCustomers();
-    setSales(allSales);
-    setCustomers(allCustomers);
-
-    // Calculate stats
-    const today = new Date();
-    const thisMonth = new Date();
-    const lastMonth = subMonths(new Date(), 1);
-
-    const todaySales = allSales
-      .filter(s => isToday(new Date(s.date)))
-      .reduce((sum, s) => sum + s.amountReceived, 0);
-
-    const thisMonthSales = allSales
-      .filter(s => isSameMonth(new Date(s.date), thisMonth))
-      .reduce((sum, s) => sum + s.amountReceived, 0);
-
-    const lastMonthSales = allSales
-      .filter(s => isSameMonth(new Date(s.date), lastMonth))
-      .reduce((sum, s) => sum + s.amountReceived, 0);
-
-    setStats({ todaySales, thisMonthSales, lastMonthSales });
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/sales/dashboard');
+      setData(response.data);
+    } catch (error) {
+      console.error("Failed to load dashboard data", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load dashboard data",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentSales = sales
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5);
+  if (loading) {
+    return <div className="p-8 text-center">Loading dashboard...</div>;
+  }
 
-  const todayRecalls = sales.filter(s => 
-    s.recallDate && isToday(new Date(s.recallDate))
-  );
+  if (!data) {
+    return <div className="p-8 text-center">No data available</div>;
+  }
 
-  const todayBirthdays = customers.filter(c => {
-    if (!c.dob) return false;
-    try {
-      const dob = parse(c.dob, 'yyyy-MM-dd', new Date());
-      const today = new Date();
-      return dob.getMonth() === today.getMonth() && dob.getDate() === today.getDate();
-    } catch {
-      return false;
-    }
-  });
-
-  const StatCard = ({ title, value, icon: Icon, color }: any) => (
+  const StatCard = ({ title, value, count, icon: Icon, color }: any) => (
     <div className="bg-card rounded-xl p-6 shadow-md hover:shadow-lg transition-shadow">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground font-medium">{title}</p>
           <p className="text-3xl font-bold mt-2">₹{value.toLocaleString()}</p>
+          {count !== undefined && <p className="text-xs text-muted-foreground mt-1">{count} sales</p>}
         </div>
         <div className={`p-4 rounded-xl ${color}`}>
           <Icon className="w-8 h-8 text-white" />
@@ -87,24 +65,33 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard
           title="Today's Sales"
-          value={stats.todaySales}
+          value={data.todays_sales.amount}
+          count={data.todays_sales.count}
           icon={DollarSign}
           color="bg-primary"
         />
         <StatCard
-          title="This Month's Sales"
-          value={stats.thisMonthSales}
+          title="This Month"
+          value={data.this_month_sales.amount}
+          count={data.this_month_sales.count}
           icon={TrendingUp}
           color="bg-success"
         />
         <StatCard
-          title="Last Month's Sales"
-          value={stats.lastMonthSales}
+          title="Last Month"
+          value={data.last_month_sales.amount}
+          count={data.last_month_sales.count}
           icon={Calendar}
           color="bg-warning"
+        />
+        <StatCard
+          title="Total Due"
+          value={data.total_due}
+          icon={AlertCircle}
+          color="bg-destructive"
         />
       </div>
 
@@ -113,27 +100,26 @@ const Dashboard = () => {
         <div className="bg-card rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-bold mb-4">Recent Sales</h2>
           <div className="space-y-3">
-            {recentSales.length === 0 ? (
+            {(!data.recent_sales || data.recent_sales.length === 0) ? (
               <p className="text-muted-foreground text-center py-8">No sales yet</p>
             ) : (
-              recentSales.map(sale => (
+              data.recent_sales.map(sale => (
                 <div
                   key={sale.id}
                   className="flex items-center justify-between p-3 bg-accent/30 rounded-lg hover:bg-accent/50 transition-colors"
                 >
                   <div>
-                    <p className="font-medium">{sale.customerName}</p>
+                    <p className="font-medium">{sale.customer?.name || sale.customerName || 'Unknown Customer'}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(new Date(sale.date), 'MMM dd, yyyy')}
+                      {format(new Date(sale.sale_date || sale.date || ''), 'MMM dd, yyyy')}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-primary">₹{sale.amountReceived.toLocaleString()}</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      sale.status === 'Completed' ? 'bg-success/20 text-success' :
-                      sale.status === 'Ready' ? 'bg-warning/20 text-warning' :
-                      'bg-muted text-muted-foreground'
-                    }`}>
+                    <p className="font-bold text-primary">₹{Number(sale.received_amount ?? sale.amountReceived ?? 0).toLocaleString()}</p>
+                    <span className={`text-xs px-2 py-1 rounded-full ${sale.status === 'Completed' ? 'bg-success/20 text-success' :
+                        sale.status === 'Ready' ? 'bg-warning/20 text-warning' :
+                          'bg-muted text-muted-foreground'
+                      }`}>
                       {sale.status}
                     </span>
                   </div>
@@ -149,20 +135,20 @@ const Dashboard = () => {
           <div className="bg-card rounded-xl p-6 shadow-md">
             <h2 className="text-xl font-bold mb-4">Today's Recalls</h2>
             <div className="space-y-3">
-              {todayRecalls.length === 0 ? (
+              {(!data.recalls_today || data.recalls_today.length === 0) ? (
                 <p className="text-muted-foreground text-center py-4">No recalls today</p>
               ) : (
-                todayRecalls.map(sale => (
+                data.recalls_today.map(customer => (
                   <div
-                    key={sale.id}
+                    key={customer.id}
                     className="flex items-center justify-between p-3 bg-accent/30 rounded-lg"
                   >
                     <div>
-                      <p className="font-medium">{sale.customerName}</p>
-                      <p className="text-sm text-muted-foreground">{sale.customerPhone}</p>
+                      <p className="font-medium">{customer.name}</p>
+                      <p className="text-sm text-muted-foreground">{customer.phone}</p>
                     </div>
                     <button
-                      onClick={() => sendWhatsAppMessage(sale.customerPhone, getRecallMessage(sale.customerName))}
+                      onClick={() => sendWhatsAppMessage(customer.phone, getRecallMessage(customer.name))}
                       className="p-2 bg-success text-white rounded-lg hover:bg-success/90 transition-colors"
                       title="Send WhatsApp"
                     >
@@ -178,10 +164,10 @@ const Dashboard = () => {
           <div className="bg-card rounded-xl p-6 shadow-md">
             <h2 className="text-xl font-bold mb-4">Birthdays Today 🎉</h2>
             <div className="space-y-3">
-              {todayBirthdays.length === 0 ? (
+              {(!data.birthdays_today || data.birthdays_today.length === 0) ? (
                 <p className="text-muted-foreground text-center py-4">No birthdays today</p>
               ) : (
-                todayBirthdays.map(customer => (
+                data.birthdays_today.map(customer => (
                   <div
                     key={customer.id}
                     className="flex items-center justify-between p-3 bg-accent/30 rounded-lg"

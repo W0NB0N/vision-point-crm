@@ -1,22 +1,23 @@
 export interface Customer {
-  id: string;
+  id: number;
   name: string;
   phone: string;
   gender: 'Male' | 'Female' | 'Other';
   age?: number;
   dob?: string;
   notes?: string;
-  createdAt: string;
+  created_at?: string;
+  createdAt?: string; // legacy
 }
 
 export interface Prescription {
-  id: string;
-  customerId: string;
-  powerType: 'Specs' | 'Contacts';
+  id: number;
+  customerId: number;
+  type: 'Specs' | 'Contacts';
   date: string;
-  doctorName?: string;
-  leftEye: EyePower;
-  rightEye: EyePower;
+  doctor_name?: string;
+  left_eye: EyePower;
+  right_eye: EyePower;
   psm?: string;
   pd?: string;
   fh?: string;
@@ -36,6 +37,9 @@ export interface EyePower {
 }
 
 export interface SaleItem {
+  category: 'Product' | 'Service';
+  item_type?: string;
+  item_detail?: string;
   name: string;
   note: string;
   price: number;
@@ -44,36 +48,53 @@ export interface SaleItem {
 }
 
 export interface Sale {
-  id: string;
-  customerId: string;
-  customerName: string;
-  customerPhone: string;
-  date: string;
+  id: number;
+  customer_id: number;
+  customerId?: string; // legacy support if needed
+  customerName?: string; // legacy
+  customerPhone?: string; // legacy
+  customer?: Customer;
+  sale_date: string;
+  date?: string; // legacy
   items: SaleItem[];
   totalQuantity: number;
   totalAmount: number;
   discount: number;
-  netAmount: number;
-  amountReceived: number;
+  net_amount: number; // backend
+  netAmount?: number; // legacy
+  received_amount: number; // backend
+  amountReceived?: number; // legacy
   paymentMethod: 'Cash' | 'Card' | 'UPI';
-  dueAmount: number;
-  recallDate?: string;
+  due_amount: number; // backend
+  dueAmount?: number; // legacy
+  recall_date?: string; // backend
+  recallDate?: string; // legacy
   status: 'Pending' | 'Ready' | 'Completed';
-  prescriptionId?: string;
+  prescriptionId?: number;
+  payments?: any[];
 }
 
 export interface Transaction {
-  id: string;
+  id: number;
   date: string;
   type: 'Credit' | 'Debit';
   amount: number;
   method: 'Cash' | 'Card' | 'UPI';
   note: string;
-  billNumber?: string;
+  billNumber?: string | number;
+}
+
+export interface SalesStats {
+  amount: number;
+  count: number;
 }
 
 export interface DashboardStats {
-  todaySales: number;
-  thisMonthSales: number;
-  lastMonthSales: number;
+  todays_sales: SalesStats;
+  this_month_sales: SalesStats;
+  last_month_sales: SalesStats;
+  total_due: number;
+  recent_sales: Sale[];
+  recalls_today: Customer[];
+  birthdays_today: Customer[];
 }

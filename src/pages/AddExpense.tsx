@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveTransaction, generateId } from '@/lib/storage';
-import { Transaction } from '@/types';
+import api from '@/lib/api';
 import { toast } from 'sonner';
 import { DollarSign } from 'lucide-react';
 
@@ -15,7 +14,7 @@ const AddExpense = () => {
     notes: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.amount) {
@@ -23,18 +22,20 @@ const AddExpense = () => {
       return;
     }
 
-    const transaction: Transaction = {
-      id: generateId(),
-      date: formData.date,
-      type: formData.type,
-      amount: parseFloat(formData.amount),
-      method: formData.method,
-      note: formData.notes || `${formData.type} transaction`,
-    };
+    try {
+      await api.post('/cashbook', {
+        date: formData.date,
+        type: formData.type,
+        amount: parseFloat(formData.amount),
+        method: formData.method,
+        note: formData.notes || `${formData.type} transaction`,
+      });
 
-    saveTransaction(transaction);
-    toast.success('Transaction added successfully!');
-    navigate('/cashbook');
+      toast.success('Transaction added successfully!');
+      navigate('/cashbook');
+    } catch (error) {
+      toast.error('Failed to add transaction');
+    }
   };
 
   return (

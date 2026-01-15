@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveCustomer, generateId } from '@/lib/storage';
-import { Customer } from '@/types';
+import api from '@/lib/api';
 import { toast } from 'sonner';
 import PrescriptionModal from '@/components/PrescriptionModal';
 import { Plus } from 'lucide-react';
@@ -9,7 +8,7 @@ import { Plus } from 'lucide-react';
 const AddCustomer = () => {
   const navigate = useNavigate();
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
-  const [savedCustomerId, setSavedCustomerId] = useState<string | null>(null);
+  const [savedCustomerId, setSavedCustomerId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -19,7 +18,7 @@ const AddCustomer = () => {
     notes: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.phone) {
@@ -27,30 +26,32 @@ const AddCustomer = () => {
       return;
     }
 
-    const customer: Customer = {
-      id: generateId(),
-      name: formData.name,
-      phone: formData.phone,
-      gender: formData.gender,
-      age: formData.age ? parseInt(formData.age) : undefined,
-      dob: formData.dob,
-      notes: formData.notes,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const response = await api.post('/customers', {
+        name: formData.name,
+        phone: formData.phone,
+        gender: formData.gender,
+        age: formData.age ? parseInt(formData.age) : undefined,
+        dob: formData.dob || undefined,
+        notes: formData.notes,
+      });
 
-    saveCustomer(customer);
-    setSavedCustomerId(customer.id);
-    toast.success('Customer added successfully!');
-    
-    // Reset form
-    setFormData({
-      name: '',
-      phone: '',
-      gender: 'Male',
-      age: '',
-      dob: '',
-      notes: '',
-    });
+      setSavedCustomerId(response.data.id);
+      toast.success('Customer added successfully!');
+
+      // Reset form
+      setFormData({
+        name: '',
+        phone: '',
+        gender: 'Male',
+        age: '',
+        dob: '',
+        notes: '',
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.detail || 'Failed to add customer');
+    }
   };
 
   return (
@@ -115,7 +116,21 @@ const AddCustomer = () => {
               <input
                 type="date"
                 value={formData.dob}
-                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                onChange={(e) => {
+                  const dob = e.target.value;
+                  let age = '';
+                  if (dob) {
+                    const birthDate = new Date(dob);
+                    const today = new Date();
+                    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+                    const m = today.getMonth() - birthDate.getMonth();
+                    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                      calculatedAge--;
+                    }
+                    age = calculatedAge.toString();
+                  }
+                  setFormData({ ...formData, dob, age });
+                }}
                 className="input-field"
               />
             </div>
@@ -136,7 +151,7 @@ const AddCustomer = () => {
             <button type="submit" className="btn-primary">
               Save Customer
             </button>
-            
+
             {savedCustomerId && (
               <button
                 type="button"
